@@ -169,3 +169,14 @@
     }
 
     function proximaPregunta() {
+        indexActual++;
+        if (indexActual < db.length) mostrarPregunta();
+        else alert("Fin del test");
+    }
+
+    function actualizarHeader() {
+        document.getElementById('stats').innerText = `Pregunta: ${indexActual + 1}/${db.length} | Nota: ${puntos.toFixed(2)}`;
+    }
+</script>
+</body>
+</html>
