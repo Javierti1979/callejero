@@ -3,16 +3,230 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Entrenamiento Bomberos Madrid</title>
+    <title>Entrenamiento Bomberos Madrid - Mapa Integrado</title>
     <style>
-        :root { --primary: #d32f2f; --secondary: #1976d2; --bg: #f0f2f5; }
+        :root { --primary: #d32f2f; --secondary: #1976d2; --bg: #f0f2f5; --text: #1c1e21; }
         body, html { margin: 0; padding: 0; height: 100vh; font-family: 'Segoe UI', sans-serif; background: var(--bg); overflow: hidden; }
 
-        /* Pantalla de Login mejorada */
+        /* Pantalla de Login */
         #login-overlay { 
             position: fixed; inset: 0; background: #b71c1c; color: white; 
             display: flex; flex-direction: column; justify-content: center; 
             align-items: center; z-index: 9999; 
         }
         .login-box { background: white; padding: 30px; border-radius: 15px; color: #333; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.3); width: 300px; }
-        .login-box h2 { margin-
+        .login-box input { 
+            width: 100%; padding: 12px; margin: 15px 0; border: 2px solid #ddd; 
+            border-radius: 8px; box-sizing: border-box; font-size: 1em; text-align: center;
+        }
+        .login-box button { 
+            background: #b71c1c; color: white; border: none; padding: 12px 25px; 
+            border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%;
+        }
+
+        /* Estructura Principal */
+        #app-content { display: none; height: 100vh; flex-direction: column; }
+        header { background: var(--primary); color: white; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; height: 60px; box-sizing: border-box; }
+        
+        main { display: flex; flex: 1; overflow: hidden; }
+
+        /* Columna Preguntas */
+        #quiz-section { width: 420px; background: white; padding: 20px; overflow-y: auto; border-right: 1px solid #ddd; display: flex; flex-direction: column; box-shadow: 2px 0 5px rgba(0,0,0,0.05); }
+        .id-badge { background: #eee; padding: 4px 8px; border-radius: 4px; font-size: 0.7em; font-weight: bold; margin-bottom: 10px; display: inline-block; color: #666; }
+        .enunciado { font-weight: bold; font-size: 1.05em; margin-bottom: 20px; line-height: 1.4; color: #000; }
+        .opcion { border: 2px solid #e4e6eb; padding: 12px; margin-bottom: 10px; border-radius: 10px; cursor: pointer; font-size: 0.9em; background: #fff; transition: 0.2s; }
+        .opcion:hover { border-color: var(--secondary); background: #f0f7ff; }
+        
+        .correcta { background: #e8f5e9 !important; border-color: #4caf50 !important; color: #2e7d32; font-weight: bold; }
+        .incorrecta { background: #ffebe9 !important; border-color: #fa3e3e !important; }
+        .real-correcta { border: 2px solid #4caf50 !important; background: #f1f8e9; }
+
+        /* Botón de Mapa antes de contestar */
+        .btn-help-map { background: #444; color: white; border: none; padding: 10px; border-radius: 8px; cursor: pointer; margin-bottom: 15px; font-size: 0.8em; font-weight: bold; width: 100%; }
+        .btn-help-map:hover { background: #000; }
+
+        #feedback { margin-top: 15px; padding: 15px; background: #fff9c4; border-left: 5px solid #fbc02d; display: none; font-size: 0.85em; border-radius: 8px; }
+        .btn-next { background: var(--primary); color: white; border: none; padding: 15px; width: 100%; border-radius: 8px; cursor: pointer; margin-top: 15px; font-weight: bold; display: none; }
+
+        /* Columna Mapa Integrado */
+        #map-section { flex-grow: 1; background: #ddd; position: relative; }
+        #map-iframe { width: 100%; height: 100%; border: none; display: none; }
+        #map-placeholder { 
+            position: absolute; inset: 0; background: #e5e5e5; 
+            display: flex; flex-direction: column; justify-content: center; align-items: center; 
+            color: #666; text-align: center; padding: 20px; font-style: italic; z-index: 5;
+        }
+
+        @media (max-width: 1024px) {
+            main { flex-direction: column; }
+            #quiz-section { width: 100%; height: 55%; }
+            #map-section { height: 45%; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Login -->
+<div id="login-overlay">
+    <div class="login-box">
+        <div style="font-size: 40px;">🚒</div>
+        <h2>ACCESO PRIVADO</h2>
+        <input type="password" id="pass-input" placeholder="Contraseña: Madrid2025">
+        <button onclick="validatePass()">ENTRAR</button>
+        <p id="error-msg" style="color: red; font-size: 0.8em; margin-top: 10px; display: none;">Clave incorrecta</p>
+    </div>
+</div>
+
+<div id="app-content">
+    <header>
+        <div><strong>BOMBEROS MADRID</strong> <small>Orientación</small></div>
+        <div id="stats" style="font-size: 0.9em; font-weight: bold;">Cargando datos...</div>
+    </header>
+
+    <main>
+        <section id="quiz-section">
+            <div id="id-badge" class="id-badge"></div>
+            <div id="enunciado" class="enunciado"></div>
+            
+            <!-- Botón para ver mapa ANTES de contestar -->
+            <button id="btn-show-map" class="btn-help-map" onclick="verMapaApoyo()">🔍 CONSULTAR MAPA DE APOYO</button>
+            
+            <div id="opciones"></div>
+            <div id="feedback"></div>
+            <button class="btn-next" onclick="proximaPregunta()">SIGUIENTE PREGUNTA →</button>
+        </section>
+
+        <section id="map-section">
+            <div id="map-placeholder">
+                <p>Usa el botón de consulta o responde para ver el mapa</p>
+            </div>
+            <iframe id="map-iframe" src=""></iframe>
+        </section>
+    </main>
+</div>
+
+<script>
+    const CLAVE_ACCESO = "Madrid2025"; 
+    const SHEET_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTnSOPfF6m1OGAqN0j6GqnU6jGuoe7nFbtSE_FjwCz6Clx71hW5vGAcHYgH8B8yCQFJakRkLPRfM1H-/pub?gid=2090000542&single=true&output=csv';
+
+    let db = [];
+    let indexActual = 0;
+    let puntos = 0;
+
+    document.getElementById('pass-input').addEventListener('keypress', (e) => { if (e.key === 'Enter') validatePass(); });
+
+    function validatePass() {
+        if (document.getElementById('pass-input').value === CLAVE_ACCESO) {
+            document.getElementById('login-overlay').style.display = 'none';
+            document.getElementById('app-content').style.display = 'flex';
+            cargarDatos();
+        } else {
+            document.getElementById('error-msg').style.display = 'block';
+        }
+    }
+
+    async function cargarDatos() {
+        try {
+            const response = await fetch(SHEET_URL);
+            const data = await response.text();
+            parsearCSV(data);
+        } catch (e) { alert("Error de conexión con la base de datos."); }
+    }
+
+    function parsearCSV(texto) {
+        const lineas = texto.split(/\r?\n/);
+        const separador = lineas[0].includes(';') ? ';' : ',';
+        db = [];
+        for (let i = 1; i < lineas.length; i++) {
+            const c = lineas[i].split(separador).map(s => s.replace(/^"|"$/g, '').trim());
+            if (c.length >= 6) {
+                db.push({ id: c[0], enunciado: c[1], opciones: [c[2], c[3], c[4]], correcta: c[5].toUpperCase(), comentarios: c[6], url: c[7] });
+            }
+        }
+        db.sort(() => Math.random() - 0.5);
+        mostrarPregunta();
+    }
+
+    function mostrarPregunta() {
+        if (db.length === 0) return;
+        const p = db[indexActual];
+        
+        document.getElementById('id-badge').innerText = p.id;
+        document.getElementById('enunciado').innerText = p.enunciado;
+        document.getElementById('feedback').style.display = 'none';
+        document.querySelector('.btn-next').style.display = 'none';
+        document.getElementById('btn-show-map').style.display = 'block';
+        
+        // Reset Mapa
+        document.getElementById('map-placeholder').style.display = 'flex';
+        document.getElementById('map-iframe').style.display = 'none';
+        document.getElementById('map-iframe').src = "";
+        
+        const cont = document.getElementById('opciones');
+        cont.innerHTML = '';
+        ['A', 'B', 'C'].forEach((letra, i) => {
+            const div = document.createElement('div');
+            div.className = 'opcion';
+            div.innerText = p.opciones[i];
+            div.onclick = () => verificar(letra, div);
+            cont.appendChild(div);
+        });
+        actualizarHeader();
+    }
+
+    // Función para ver el mapa ANTES de contestar (Busca el Origen)
+    function verMapaApoyo() {
+        const p = db[indexActual];
+        // Extraemos el origen del enunciado (normalmente después de "Del " o "De ")
+        let query = p.enunciado.split(' a ')[0].replace(/Del |De /i, '');
+        query += " Madrid"; // Aseguramos que busque en Madrid
+
+        document.getElementById('map-placeholder').style.display = 'none';
+        document.getElementById('map-iframe').style.display = 'block';
+        document.getElementById('map-iframe').src = `https://maps.google.com/maps?q=${encodeURIComponent(query)}&t=m&z=14&output=embed`;
+    }
+
+    function verificar(letra, div) {
+        const p = db[indexActual];
+        const todas = document.querySelectorAll('.opcion');
+        todas.forEach(o => o.style.pointerEvents = 'none');
+        const idxCorrecto = p.correcta === 'A' ? 0 : p.correcta === 'B' ? 1 : 2;
+
+        if (letra === p.correcta) {
+            div.classList.add('correcta');
+            puntos += 1;
+        } else {
+            div.classList.add('incorrecta');
+            todas[idxCorrecto].classList.add('real-correcta');
+            puntos -= 0.33;
+        }
+
+        document.getElementById('feedback').innerHTML = `<strong>EXPLICACIÓN:</strong><br>${p.comentarios}`;
+        document.getElementById('feedback').style.display = 'block';
+        document.querySelector('.btn-next').style.display = 'block';
+        document.getElementById('btn-show-map').style.display = 'none';
+
+        // Al verificar, mostramos el DESTINO
+        const destino = p.opciones[idxCorrecto].split('-').pop().trim();
+        document.getElementById('map-placeholder').style.display = 'none';
+        document.getElementById('map-iframe').style.display = 'block';
+        document.getElementById('map-iframe').src = `https://maps.google.com/maps?q=${encodeURIComponent(destino + " Madrid")}&t=m&z=15&output=embed`;
+    }
+
+    function proximaPregunta() {
+        indexActual++;
+        if (indexActual < db.length) {
+            mostrarPregunta();
+            document.getElementById('quiz-section').scrollTop = 0;
+        } else {
+            alert("Test finalizado. Nota: " + puntos.toFixed(2));
+            location.reload();
+        }
+    }
+
+    function actualizarHeader() {
+        document.getElementById('stats').innerText = `P: ${indexActual + 1}/${db.length} | Nota: ${puntos.toFixed(2)}`;
+    }
+</script>
+</body>
+</html>
