@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bomberos Madrid - Test de Orientación</title>
+    <style>
+        :root { --primary: #d32f2f; --secondary: #1976d2; --bg: #f0f2f5; --text: #1c1e21; }
+        body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; margin: 0; background: var(--bg); color: var(--text); display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        header { background: var(--primary); color: white; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,0.2); z-index: 100; }
+        .stats { font-size: 0.9em; font-weight: bold; background: rgba(0,0,0,0.1); padding: 5px 12px; border-radius: 20px; }
+        main { display: flex; flex: 1; overflow: hidden; }
+        #quiz-section { width: 480px; background: white; padding: 30px; overflow-y: auto; border-right: 1px solid #ddd; display: flex; flex-direction: column; }
+        .enunciado { font-size: 1.15em; font-weight: bold; margin-bottom: 25px; line-height: 1.5; color: #000; }
+        .opcion { border: 2px solid #e4e6eb; padding: 16px; margin-bottom: 12px; border-radius: 12px; cursor: pointer; transition: 0.2s; background: #fff; }
+        .opcion:hover { border-color: var(--secondary); background: #f0f7ff; }
+        .correcta { background: #e7f3ff !important; border-color: #1877f2 !important; color: #0e5a8a; font-weight: 600; }
+        .incorrecta { background: #ffebe9 !important; border-color: #fa3e3e !important; color: #8a1f1f; }
+        .real-correcta { background: #e8f5e9 !important; border-color: #4caf50 !important; color: #2e7d32; font-weight: 600; }
+        #feedback { margin-top: 20px; padding: 18px; border-radius: 10px; display: none; background: #fff9c4; border-left: 6px solid #fbc02d; font-size: 0.92em; }
+        .btn-next { background: var(--primary); color: white; border: none; padding: 16px; width: 100%; border-radius: 10px; cursor: pointer; margin-top: 20px; font-weight: bold; display: none; }
+        #map-section { flex-grow: 1; background: #e5e5e5; display: flex; justify-content: center; align-items: center; }
+        .map-btn { background: #242526; color: white; padding: 18px 35px; border-radius: 50px; text-decoration: none; font-weight: bold; display: none; }
+        #loader { position: fixed; inset: 0; background: white; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 1000; text-align: center; padding: 20px; }
+        @media (max-width: 1024px) { main { flex-direction: column; } #quiz-section { width: 100%; height: 65%; } #map-section { height: 35%; } }
+    </style>
+</head>
+<body>
+
+<div id="loader">
+    <div id="loader-content">
+        <div style="font-size: 24px; margin-bottom: 10px;">🚒</div>
+        <div>Cargando base de datos de Madrid...</div>
+        <small style="color: #666;">(Si tarda más de 5 segundos, revisa tu conexión o el enlace del CSV)</small>
+    </div>
+</div>
+
+<header>
+    <div><strong>OPOSICIÓN BOMBEROS MADRID</strong></div>
+    <div class="stats">Pregunta: <span id="current-idx">0</span>/<span id="total-qs">0</span> | Nota: <span id="score">0.00</span></div>
+</header>
+
+<main>
+    <section id="quiz-section">
+        <div id="enunciado" class="enunciado"></div>
+        <div id="opciones"></div>
+        <div id="feedback"></div>
+        <button class="btn-next" onclick="proximaPregunta()">SIGUIENTE PREGUNTA →</button>
+    </section>
+    <section id="map-section">
+        <a id="map-link" href="#" target="_blank" class="map-btn">📍 VER RECORRIDO EN MAPA</a>
+    </section>
+</main>
+
+<script>
+    const SHEET_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTnSOPfF6m1OGAqN0j6GqnU6jGuoe7nFbtSE_FjwCz6Clx71hW5vGAcHYgH8B8yCQFJakRkLPRfM1H-/pub?gid=2090000542&single=true&output=csv';
+
+    let db = [];
+    let indexActual = 0;
+    let puntos = 0;
+
+    async function cargarDatos() {
+        try {
+            console.log("Iniciando descarga de datos...");
+            const response = await fetch(SHEET_URL);
+            if (!response.ok) throw new Error('No se pudo acceder al Google Sheet');
+            const data = await response.text();
+            parsearCSV(data);
+            document.getElementById('loader').style.display = 'none';
+        } catch (error) {
+            document.getElementById('loader-content').innerHTML = `
+                <div style="color: red; font-weight: bold;">⚠️ ERROR DE CARGA</div>
+                <div style="font-size: 0.8em; margin-top: 10px;">
+                    El navegador ha bloqueado la carga de datos.<br><br>
+                    <strong>Para solucionar esto:</strong><br>
+                    Debes subir este archivo .html a internet (GitHub Pages)<br>
+                    o usar un servidor local (Live Server).<br><br>
+                    <small>${error.message}</small>
+                </div>`;
+        }
+    }
+
+    function parsearCSV(texto) {
+        const lineas = texto.split(/\r?\n/);
+        // Detectamos separador (punto y coma o coma)
+        const separador = lineas[0].includes(';') ? ';' : ',';
+        
+        for (let i = 1; i < lineas.length; i++) {
+            const fila = lineas[i];
+            if (!fila.trim()) continue;
+
+            // Procesamos la fila respetando posibles comas dentro de comillas
+            const c = fila.split(separador).map(item => item.replace(/^"|"$/g, '').trim());
+            
+            if (c.length >= 6) {
+                db.push({
+                    id: c[0],
+                    enunciado: c[1],
+                    opciones: [c[2], c[3], c[4]],
+                    correcta: c[5].toUpperCase(),
+                    comentarios: c[6] || "Revisa el callejero oficial.",
+                    url: c[7] || ""
+                });
+            }
+        }
+        
+        if (db.length === 0) throw new Error("La base de datos está vacía.");
+        
+        db.sort(() => Math.random() - 0.5);
+        document.getElementById('total-qs').innerText = db.length;
+        mostrarPregunta();
+    }
+
+    function mostrarPregunta() {
+        const p = db[indexActual];
+        document.getElementById('current-idx').innerText = indexActual + 1;
+        document.getElementById('enunciado').innerText = p.enunciado;
+        document.getElementById('feedback').style.display = 'none';
+        document.querySelector('.btn-next').style.display = 'none';
+        document.getElementById('map-link').style.display = 'none';
+
+        const cont = document.getElementById('opciones');
+        cont.innerHTML = '';
+
+        ['A', 'B', 'C'].forEach((letra, i) => {
+            const div = document.createElement('div');
+            div.className = 'opcion';
+            div.innerText = p.opciones[i];
+            div.onclick = () => verificarRespuesta(letra, div);
+            cont.appendChild(div);
+        });
+    }
+
+    function verificarRespuesta(letra, div) {
+        const p = db[indexActual];
+        const todas = document.querySelectorAll('.opcion');
+        todas.forEach(o => o.style.pointerEvents = 'none');
+
+        const indexCorrecto = p.correcta === 'A' ? 0 : p.correcta === 'B' ? 1 : 2;
+
+        if (letra === p.correcta) {
+            div.classList.add('correcta');
+            puntos += 1;
+        } else {
+            div.classList.add('incorrecta');
+            todas[indexCorrecto].classList.add('real-correcta');
+            puntos -= 0.33;
+        }
+
+        document.getElementById('score').innerText = puntos.toFixed(2);
+        document.getElementById('feedback').innerHTML = `<strong>EXPLICACIÓN:</strong><br>${p.comentarios}`;
+        document.getElementById('feedback').style.display = 'block';
+        document.querySelector('.btn-next').style.display = 'block';
+        
+        if (p.url && p.url.startsWith('http')) {
+            document.getElementById('map-link').href = p.url;
+            document.getElementById('map-link').style.display = 'inline-block';
+        }
+    }
+
+    function proximaPregunta() {
+        indexActual++;
+        if (indexActual < db.length) {
+            mostrarPregunta();
+            document.getElementById('quiz-section').scrollTop = 0;
+        } else {
+            alert("Test completado. Nota: " + puntos.toFixed(2));
+            location.reload();
+        }
+    }
+
+    cargarDatos();
+</script>
+</body>
+</html>
